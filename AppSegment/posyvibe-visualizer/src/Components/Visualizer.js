@@ -505,22 +505,109 @@ export default function Visualizer() {
   return (
     <>
       <Leva collapsed />
-      <div style={{ position: 'absolute', bottom: '20px', left: '20px', zIndex: 10 }}>
-        <button 
-          onClick={startAudio} 
-          style={{ 
-            padding: '12px 24px', 
-            background: 'rgba(255, 255, 255, 0.1)', 
-            backdropFilter: 'blur(10px)', 
-            border: '1px solid rgba(255, 255, 255, 0.2)', 
-            color: 'white', 
-            borderRadius: '8px', 
-            cursor: 'pointer', 
-            fontSize: '16px' 
-          }}>
-          {isPlaying ? 'Pause Music' : 'Start Music Visualizer'}
-        </button>
-      </div>
+
+      {/* NEW: Header with Icon and Text */}
+      <div style={{
+  position: 'absolute',
+  top: '30px',
+  left: '30px',
+  zIndex: 10,
+  display: 'flex',
+  alignItems: 'center',
+  pointerEvents: 'none', // So it doesn't block orbit controls
+}}>
+  {/* Icon - Use an <img> tag for your specific logo */}
+  <div style={{ marginRight: '15px' }}>
+    <img 
+      src="/PosyVibe_Final.png" // <-- IMPORTANT: Change this to the path of your logo image!
+      alt="PosyVibe Logo" 
+      style={{ width: '50px', height: '50px', display: 'block' }} 
+    />
+  </div>
+  {/* Text Container */}
+  <div>
+    <h1 style={{
+      margin: 0,
+      fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+      color: 'white',
+      fontSize: '24px',
+      fontWeight: 600,
+      lineHeight: 1.2,
+      textShadow: '0 2px 4px rgba(0,0,0,0.5)',
+    }}>
+      PosyVibe
+    </h1>
+    <p style={{
+      margin: 0,
+      fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+      color: 'rgba(255, 255, 255, 0.7)',
+      fontSize: '14px',
+      fontWeight: 400,
+      textShadow: '0 1px 3px rgba(0,0,0,0.5)',
+    }}>
+      Music therapy app
+    </p>
+  </div>
+</div>
+
+      {/* NEW: Replaced classic button with translucent play/pause UI */}
+      {!isPlaying ? (
+        // Big Play button in the center when paused
+        <div
+          onClick={startAudio}
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            zIndex: 11,
+            width: '120px',
+            height: '120px',
+            background: 'rgba(255, 255, 255, 0.1)',
+            backdropFilter: 'blur(12px) saturate(1.5)',
+            WebkitBackdropFilter: 'blur(12px) saturate(1.5)',
+            border: '1.5px solid rgba(255, 255, 255, 0.2)',
+            borderRadius: '50%',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            cursor: 'pointer',
+            transition: 'all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)',
+            boxShadow: '0 10px 20px rgba(0,0,0,0.19), 0 6px 6px rgba(0,0,0,0.23)',
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.transform = 'translate(-50%, -50%) scale(1.1)';
+            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.transform = 'translate(-50%, -50%) scale(1)';
+            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+          }}
+        >
+          <svg width="50" height="50" viewBox="0 0 24 24" fill="white" style={{ marginLeft: '5px' }}>
+            <path d="M8 5v14l11-7z" />
+          </svg>
+        </div>
+      ) : (
+        // Smaller Pause button in the corner when playing
+        <div style={{ position: 'absolute', bottom: '20px', left: '20px', zIndex: 10 }}>
+          <button
+            onClick={startAudio}
+            style={{
+              padding: '12px 24px',
+              background: 'rgba(255, 255, 255, 0.1)',
+              backdropFilter: 'blur(10px)',
+              border: '1px solid rgba(255, 255, 255, 0.2)',
+              color: 'white',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontSize: '16px',
+            }}>
+            Pause
+          </button>
+        </div>
+      )}
+
       <Canvas camera={{ position: [0, 0, 6], fov: 75 }}>
         <color attach="background" args={['#000005']} />
         <fog attach="fog" args={['#000005', 6, 20]} />
