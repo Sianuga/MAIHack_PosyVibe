@@ -194,6 +194,7 @@ cython_debug/
 .cursorindexingignore
 
 
-.wav
-.mid
-.band
+*.wav
+*.mid
+*.band
+*.sf2
