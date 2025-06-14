@@ -77,6 +77,7 @@ from typing import Optional, Dict, Any, List
 import logging
 from enum import Enum
 import pandas as pd
+import joblib
 
 # Import working Thread 1 and Thread 2
 from thread1_eeg_connector import BrainAccessEEGCollector, EEGDataPackage
@@ -84,6 +85,9 @@ from thread2_eeg_processor import EEGFilterProcessor, ProcessedEEGData
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+model = joblib.load('xgb_smote_model.pkl')
+
 
 class SystemCommand(Enum):
     """Commands that can be sent to the system"""
@@ -312,10 +316,12 @@ class EEGSystemController:
                 # Option 2: Send to Thread 3 (advanced)
                 # self.emotion_model.process_dataframe(processed_data)
                 # emotion_result = self.emotion_results_queue.get(timeout=0.5)
-                
-                # For now, placeholder prediction:
-                emotion_prediction = "neutral"  # Replace with: your_model.predict(df)
-                confidence = 0.85               # Replace with: actual confidence score
+
+                df = df[['T8', 'O2', 'P4', 'C4', 'Pz', 'Fz', 'Oz', 'F4', 'F3',
+             'P3', 'F8', 'O1', 'PO3', 'C3', 'T7', 'F7']]
+
+                emotion_prediction = model.predict(df)
+                confidence = model.predict_proba(df)   # Replace with: actual confidence score
                 
                 # ====================================================================
                 
