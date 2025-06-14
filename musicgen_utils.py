@@ -7,14 +7,24 @@ import subprocess
 import ast
 import json
 import datetime
+from typing import Any
 
 dotenv.load_dotenv()
 client = openai.OpenAI(api_key=os.getenv("OPENAI_KEY"))
 
 MODEL = "gpt-4.1"
-SOUNDFONT_PATH = "resources/FatBoy-v0.786.sf2"
-OUTPUT_MIDI_PATH = "ai_gen_score_test.mid"
-OUTPUT_WAV_PATH = f"output{datetime.datetime.now()}.wav"
+from pathlib import Path
+
+BASE_DIR       = Path(__file__).resolve().parent
+RES_DIR        = BASE_DIR / "resources"
+OUT_DIR        = BASE_DIR / "data" / "outputs"
+OUT_DIR.mkdir(parents=True, exist_ok=True)
+
+SOUNDFONT_PATH = RES_DIR / "FatBoy-v0.786.sf2"
+
+stamp          = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+OUTPUT_MIDI_PATH = f"ai_gen_{stamp}.mid"
+OUTPUT_WAV_PATH  = f"ai_gen_{stamp}.wav"
 
 
 
@@ -209,38 +219,39 @@ import json
 import json, ast, re
 
 def parse_music_json(raw: str) -> dict:
-    """Return dict with instruments and optionally 'bpm' key."""
-    # --- strip markdown fences
-    txt = raw.strip()
-    txt = re.sub(r"^```(\w+)?", "", txt).strip()
+    """
+    Strip markdown, comments, and parse to dict.
+    Keeps top-level 'bpm' and any instrument entries containing 'notes'.
+    """
+    # 1. drop ```json fences (multiline-safe)
+    txt = re.sub(r"^\s*```[\w-]*", "", raw, flags=re.MULTILINE).strip()
     txt = re.sub(r"```$", "", txt).strip()
 
-    # --- remove // or # comments
-    cleaned_lines = []
+    # 2. remove // and # comments
+    cleaned = []
     for line in txt.splitlines():
-        line = re.split(r"//|#", line)[0]
+        line = re.split(r"//|#", line)[0]          # keep code left of comment
         if line.strip():
-            cleaned_lines.append(line)
-    txt = "\n".join(cleaned_lines)
+            cleaned.append(line)
+    txt = "\n".join(cleaned)
 
-    # --- try JSON first (handles true/false)
+    # 3. JSON first, fallback to Python literal
     try:
         data = json.loads(txt)
     except json.JSONDecodeError:
-        try:
-            data = ast.literal_eval(txt)
-        except Exception as e:
-            print("❌ parser failed; raw output follows ↓↓↓\n", raw)
-            raise e
+        data = ast.literal_eval(txt)
 
-    # --- normalise structure
-    out = {}
-    if "bpm" in data:
-        out["bpm"] = float(data["bpm"])
+    # 4. normalise
+    out: dict[str, Any] = {}
+    bpm_val = data.get("bpm")
+    if bpm_val is not None:
+        out["bpm"] = float(bpm_val)
+
     for key, val in data.items():
         if isinstance(val, dict) and "notes" in val:
             out[key] = val
     return out
+
 
 
 
@@ -302,53 +313,86 @@ CUSHION       = 0.1                # 10 ms early-cut
 # ───────────────── master pipeline ─────────────────
 
 import math
-# ...
+from typing import Optional
 
-def generate_and_render_music(prompt_text: str, midi_path: str, wav_path: str):
-    # 1️⃣  LLM → JSON dict  (expecting it to include "bpm": <number>)
+
+def play_midi_live(midi_obj: pretty_midi.PrettyMIDI):
+    """OPTIONAL: quick real-time preview through server speakers."""
+    import time, fluidsynth
+
+    sfid, fs = None, None
+    try:
+        fs   = fluidsynth.Synth()
+        fs.start(driver="coreaudio" if os.name == "posix" else "dsound")
+        sfid = fs.sfload(str(SOUNDFONT_PATH))
+        # program / channel assignment
+        for ch, inst in enumerate(midi_obj.instruments):
+            bank = 128 if inst.is_drum else 0
+            prog = 0 if inst.is_drum else inst.program
+            fs.program_select(ch, sfid, bank, prog)
+
+        # schedule events (simple)
+        events = []
+        for ch, inst in enumerate(midi_obj.instruments):
+            for note in inst.notes:
+                events.append(("on",  note.start, ch, note.pitch, note.velocity))
+                events.append(("off", note.end,   ch, note.pitch, 0))
+
+        events.sort(key=lambda e: e[1])
+        t0 = time.time()
+        for typ, t, ch, p, v in events:
+            while (time.time() - t0) < t:
+                time.sleep(0.001)
+            (fs.noteon if typ=="on" else fs.noteoff)(ch, p, v)
+    finally:
+        if fs:  fs.delete()
+
+import pathlib
+def generate_and_render_music(prompt_text: str,
+                              midi_path: str,
+                              wav_path: str,
+                              *,
+                              realtime_preview: bool = False) -> str:
+    """Return path to rendered WAV.  If realtime_preview=True the MIDI is also
+    played through the server’s audio device (useful only on dev boxes)."""
+
+    # 1️⃣  LLM → JSON
     music = run_music_prompt(prompt_text)
 
     # 2️⃣  tempo / bar length
-    bpm = float(music.get("bpm", DEFAULT_BPM))
-    if "bpm" in music:
-        del music["bpm"]               # remove metadata before building instruments
-    bar_len = 60.0 / bpm * BEATS_PER_BAR   # seconds per 4/4 bar
+    bpm = float(music.pop("bpm", DEFAULT_BPM))
+    bar_len = 60.0 / bpm * BEATS_PER_BAR
 
+    # 3️⃣  find latest note
+    max_end = max(float(n["end"]) for part in music.values() for n in part["notes"])
 
+    # 4️⃣  clip at last whole bar
+    clip_to = math.floor(max_end / bar_len) * bar_len
+    if clip_to <= 0:            # safety net
+        clip_to = max_end
 
-
-    # 3️⃣  discover absolute latest note end
-    max_end = 0.0
-    for part in music.values():
-        for n in part["notes"]:
-            max_end = max(float(n["end"])               # latest note of any part
-              for part in music.values()
-              for n in part["notes"])
-    print(f"max end : {max_end}")
-
-    # 4️⃣  snap to last whole bar and set final clip point
-    clip_to = math.floor(max_end / bar_len) * bar_len 
-    if clip_to <= 0:           # safety
-        clip_to = max_end if abs(max_end % bar_len) < 1e-6 else clip_to
-    print(f"Clip to: {clip_to}")
-    print(f"bar_len : {bar_len}")
-
-    # 5️⃣  build instruments with clipping
+    # 5️⃣  build MIDI
     midi = pretty_midi.PrettyMIDI()
     for name, conf in music.items():
         inst, _ = instrument_from_dict(name, conf, clip_to=clip_to)
         midi.instruments.append(inst)
-
     midi.write(midi_path)
-    import pathlib
-    print("CWD =", os.getcwd())
-    print("Font exists:", pathlib.Path(SOUNDFONT_PATH).exists())
-    print("Midi exists:", pathlib.Path(midi_path).exists())
-    subprocess.run(
-        ["fluidsynth", "-ni", SOUNDFONT_PATH, midi_path,
-        "-F", wav_path, "-r", "44100"],
-        check=True,
-        cwd=pathlib.Path(__file__).parent      # or OUTPUT_DIR
+
+    # 6️⃣  optional real-time preview (DEV only)
+    if realtime_preview and os.getenv("ALLOW_REALTIME_PREVIEW", "false").lower() == "true":
+        play_midi_live(midi)           # blocks until done
+
+    # 7️⃣  offline render (always)
+    result = subprocess.run(
+        ["fluidsynth", "-ni", "-g", "1.0",
+        str(SOUNDFONT_PATH), str(midi_path),
+        "-F", str(wav_path), "-r", "44100"],
+        capture_output=True, text=True
     )
 
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"FluidSynth failed ({result.returncode}):\n{result.stderr}"
+    )
+    
     return wav_path
