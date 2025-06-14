@@ -5,9 +5,7 @@ import { OrbitControls } from '@react-three/drei';
 import { EffectComposer, Bloom } from '@react-three/postprocessing';
 import { useControls, Leva, button } from 'leva';
 
-// --- SHADERS MODIFIED FOR SNAPINESS ---
-
-// Vertex shader now includes a 'u_kick' uniform for a global pulse effect.
+// --- SHADERS (keeping them the same as before) ---
 const vertexShader = `
   uniform float u_time;
   uniform float u_bass_intensity;
@@ -18,7 +16,7 @@ const vertexShader = `
   uniform float u_liquid_factor;
   uniform float u_turbulence;
   uniform float u_displacement_scale;
-  uniform float u_kick; // <-- NEW: For snappy pulse
+  uniform float u_kick;
   
   varying float vDisplacement;
   varying vec3 vNormal;
@@ -31,14 +29,13 @@ const vertexShader = `
   vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
   float snoise(vec3 v) { const vec2 C = vec2(1.0/6.0, 1.0/3.0); const vec4 D = vec4(0.0, 0.5, 1.0, 2.0); vec3 i = floor(v + dot(v, C.yyy)); vec3 x0 = v - i + dot(i, C.xxx); vec3 g = step(x0.yzx, x0.xyz); vec3 l = 1.0 - g; vec3 i1 = min(g.xyz, l.zxy); vec3 i2 = max(g.xyz, l.zxy); vec3 x1 = x0 - i1 + C.xxx; vec3 x2 = x0 - i2 + C.yyy; vec3 x3 = x0 - D.yyy; i = mod289(i); vec4 p = permute(permute(permute(i.z + vec4(0.0, i1.z, i2.z, 1.0)) + i.y + vec4(0.0, i1.y, i2.y, 1.0)) + i.x + vec4(0.0, i1.x, i2.x, 1.0)); float n_ = 0.142857142857; vec3 ns = n_ * D.wyz - D.xzx; vec4 j = p - 49.0 * floor(p * ns.z * ns.z); vec4 x_ = floor(j * ns.z); vec4 y_ = floor(j - 7.0 * x_); vec4 x = x_ * ns.x + ns.yyyy; vec4 y = y_ * ns.x + ns.yyyy; vec4 h = 1.0 - abs(x) - abs(y); vec4 b0 = vec4(x.xy, y.xy); vec4 b1 = vec4(x.zw, y.zw); vec4 s0 = floor(b0) * 2.0 + 1.0; vec4 s1 = floor(b1) * 2.0 + 1.0; vec4 sh = -step(h, vec4(0.0)); vec4 a0 = b0.xzyw + s0.xzyw * sh.xxyy; vec4 a1 = b1.xzyw + s1.xzyw * sh.zzww; vec3 p0 = vec3(a0.xy, h.x); vec3 p1 = vec3(a0.zw, h.y); vec3 p2 = vec3(a1.xy, h.z); vec3 p3 = vec3(a1.zw, h.w); vec4 norm = taylorInvSqrt(vec4(dot(p0, p0), dot(p1, p1), dot(p2, p2), dot(p3, p3))); p0 *= norm.x; p1 *= norm.y; p2 *= norm.z; p3 *= norm.w; vec4 m = max(0.6 - vec4(dot(x0, x0), dot(x1, x1), dot(x2, x2), dot(x3, x3)), 0.0); m = m * m; return 42.0 * dot(m * m, vec4(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3))); }
 
-  // FBM function for sharper details
   float fbm(vec3 p, float turb) {
     float value = 0.0;
     float amplitude = 0.5;
     vec3 shift = vec3(100.0);
     
     for (int i = 0; i < 4; i++) {
-      value += amplitude * abs(snoise(p)); // abs() creates sharper creases
+      value += amplitude * abs(snoise(p));
       p = p * 2.0 + shift;
       amplitude *= 0.5;
       shift = shift * turb;
@@ -46,7 +43,6 @@ const vertexShader = `
     return value;
   }
 
-  // Liquid-like warping function
   vec3 liquidWarp(vec3 p, float factor) {
     float warpX = snoise(p + vec3(0.0, u_time * 0.05, 0.0)) * factor;
     float warpY = snoise(p + vec3(u_time * 0.05, 0.0, 0.0)) * factor;
@@ -75,8 +71,7 @@ const vertexShader = `
     float total_displacement = (bass_noise + mid_noise + treble_noise) * u_displacement_scale;
     vDisplacement = total_displacement;
     
-    // <-- NEW: Apply kick as a uniform pulse + exaggerate displacement
-    vec3 kick_pulse = normal * u_kick * 0.3; // Add a direct outward pulse
+    vec3 kick_pulse = normal * u_kick * 0.3;
     vec3 displaced_position = position + normal * total_displacement * (1.0 + u_kick) + flow + kick_pulse;
 
     vPosition = displaced_position;
@@ -86,15 +81,14 @@ const vertexShader = `
   }
 `;
 
-// Fragment shader now includes a 'u_kick' uniform for a bright flash.
 const fragmentShader = `
   uniform vec3 u_color;
   uniform vec3 u_hotspot_color;
   uniform float u_bass_intensity;
   uniform float u_time;
   uniform float u_glow_intensity;
-  uniform float u_kick; // <-- NEW: For snappy flash
-  uniform float u_flash_intensity; // <-- NEW: Control flash brightness
+  uniform float u_kick;
+  uniform float u_flash_intensity;
   
   varying float vDisplacement;
   varying vec3 vNormal;
@@ -124,7 +118,6 @@ const fragmentShader = `
     float edge_glow = pow(fresnel, 3.0) * u_glow_intensity;
     finalColor += u_hotspot_color * edge_glow * 0.3;
 
-    // <-- NEW: Add a bright flash based on the kick value
     finalColor += u_hotspot_color * u_kick * u_flash_intensity;
     
     gl_FragColor = vec4(finalColor, 1.0);
@@ -229,13 +222,11 @@ function FloatingSparks() {
   );
 }
 
-// --- MAIN COMPONENT, MODIFIED FOR SNAPINESS ---
 function AudioDrivenSphere({ analyser, isPlaying }) {
   const materialRef = useRef();
   const meshRef = useRef();
-  const kickRef = useRef({ value: 0, lastBass: 0 }); // Ref to track kick state
+  const kickRef = useRef({ value: 0, lastBass: 0 });
 
-  // --- LEVA CONTROLS WITH NEW ADDITIONS ---
   const { 
     reactionStyle,
     kickStrength,
@@ -246,10 +237,8 @@ function AudioDrivenSphere({ analyser, isPlaying }) {
     glowIntensity, displacementScale 
   } = useControls('Sphere', {
     reactionStyle: { value: 'Snappy', options: ['Fluid', 'Snappy'], label: 'Reaction Style' },
-    // Snappy controls
     kickStrength: { value: 0.6, min: 0.1, max: 2.0, step: 0.05, render: (get) => get('Sphere.reactionStyle') === 'Snappy', label: 'Kick Pulse' },
     flashIntensity: { value: 1.0, min: 0.1, max: 3.0, step: 0.1, render: (get) => get('Sphere.reactionStyle') === 'Snappy', label: 'Kick Flash' },
-    // Fluid controls (and general)
     responsiveness: { value: 0.08, min: 0.01, max: 0.3, step: 0.01, label: 'Responsiveness (Fluid)', render: (get) => get('Sphere.reactionStyle') === 'Fluid' },
     color: { value: '#002bff', label: 'Sphere Color' },
     hotspotColor: {value: '#eb00ff', label: 'Hotspot Color'},
@@ -264,7 +253,6 @@ function AudioDrivenSphere({ analyser, isPlaying }) {
     displacementScale: { value: 0.7, min: 0.1, max: 2.0, step: 0.05 }
   });
 
-  // --- UNIFORMS WITH NEW ADDITIONS ---
   const uniforms = useMemo(
     () => ({
       u_time: { value: 0 },
@@ -279,8 +267,8 @@ function AudioDrivenSphere({ analyser, isPlaying }) {
       u_turbulence: { value: turbulence },
       u_glow_intensity: { value: glowIntensity },
       u_displacement_scale: { value: displacementScale },
-      u_kick: { value: 0 }, // <-- NEW
-      u_flash_intensity: { value: flashIntensity } // <-- NEW
+      u_kick: { value: 0 },
+      u_flash_intensity: { value: flashIntensity }
     }),
     []
   );
@@ -297,7 +285,6 @@ function AudioDrivenSphere({ analyser, isPlaying }) {
     }
   }, [color, hotspotColor, liquidFactor, turbulence, glowIntensity, displacementScale, flashIntensity]);
 
-  // Dynamically change analyser settings for different styles
   useEffect(() => {
     if (analyser) {
         analyser.smoothingTimeConstant = reactionStyle === 'Snappy' ? 0.2 : 0.6;
@@ -311,8 +298,6 @@ function AudioDrivenSphere({ analyser, isPlaying }) {
     uniforms.u_noise_speed.value = noiseSpeed;
     uniforms.u_noise_scale.value = noiseScale;
 
-    // --- NEW: KICK DECAY ---
-    // The kick value decays each frame, creating a tail-off effect.
     kickRef.current.value = Math.max(0, kickRef.current.value * 0.92);
     uniforms.u_kick.value = kickRef.current.value * kickStrength;
 
@@ -324,7 +309,6 @@ function AudioDrivenSphere({ analyser, isPlaying }) {
       const midRange = Math.floor(analyser.frequencyBinCount * 0.3);
       const trebleStart = Math.floor(analyser.frequencyBinCount * 0.5);
 
-      // Enhanced bass detection
       let bassSum = 0; for (let i = 0; i < bassRange; i++) { bassSum += Math.pow(dataArray[i] / 255, 3); }
       const bass = Math.sqrt(bassSum / bassRange);
 
@@ -339,25 +323,21 @@ function AudioDrivenSphere({ analyser, isPlaying }) {
       const targetTreble = treble * trebleResponse;
 
       if (reactionStyle === 'Snappy') {
-        // --- NEW: KICK DETECTION ---
-        const kickThreshold = 0.5; // Adjust this threshold to your liking
+        const kickThreshold = 0.5;
         if (bass > kickRef.current.lastBass * 1.5 && bass > kickThreshold) {
-            kickRef.current.value = 1.0; // Set kick to max on detection
+            kickRef.current.value = 1.0;
         }
         kickRef.current.lastBass = bass;
 
-        // Use high lerp factors for an immediate, "snappy" response
         uniforms.u_bass_intensity.value = THREE.MathUtils.lerp(uniforms.u_bass_intensity.value, targetBass, 0.5);
         uniforms.u_mid_intensity.value = THREE.MathUtils.lerp(uniforms.u_mid_intensity.value, targetMid, 0.4);
         uniforms.u_treble_intensity.value = THREE.MathUtils.lerp(uniforms.u_treble_intensity.value, targetTreble, 0.4);
-      } else { // Fluid style
-        // Use the 'responsiveness' slider for a smoother, "fluid" motion
+      } else {
         uniforms.u_bass_intensity.value = THREE.MathUtils.lerp(uniforms.u_bass_intensity.value, targetBass, responsiveness);
         uniforms.u_mid_intensity.value = THREE.MathUtils.lerp(uniforms.u_mid_intensity.value, targetMid, responsiveness * 1.2);
         uniforms.u_treble_intensity.value = THREE.MathUtils.lerp(uniforms.u_treble_intensity.value, targetTreble, responsiveness * 1.5);
       }
     } else {
-      // Slower fade out for a more graceful stop
       uniforms.u_bass_intensity.value = THREE.MathUtils.lerp(uniforms.u_bass_intensity.value, 0, 0.02);
       uniforms.u_mid_intensity.value = THREE.MathUtils.lerp(uniforms.u_mid_intensity.value, 0, 0.02);
       uniforms.u_treble_intensity.value = THREE.MathUtils.lerp(uniforms.u_treble_intensity.value, 0, 0.02);
@@ -423,12 +403,10 @@ const presetManager = {
   }
 };
 
-export default function Visualizer() {
-  const [analyser, setAnalyser] = useState(null);
-  const [isPlaying, setIsPlaying] = useState(false);
+// MAIN CHANGE: The Visualizer component now accepts analyser and isPlaying as props
+// and doesn't manage its own audio
+export default function Visualizer({ analyser, isPlaying }) {
   const [presetName, setPresetName] = useState('');
-  const audioRef = useRef();
-  const audioContextRef = useRef();
   
   const { autoRotateSpeed } = useControls('Scene', { 
     autoRotateSpeed: { value: -0.5, min: -5, max: 5, step: 0.1 }
@@ -470,144 +448,10 @@ export default function Visualizer() {
     })
   });
   
-  const startAudio = () => {
-    if (isPlaying) { 
-      audioRef.current.pause(); 
-      setIsPlaying(false); 
-      return; 
-    }
-    if (audioRef.current && audioContextRef.current) { 
-      if(audioContextRef.current.state === 'suspended') { 
-        audioContextRef.current.resume(); 
-      } 
-      audioRef.current.play(); 
-      setIsPlaying(true); 
-      return; 
-    }
-    const audio = new Audio('/audio/test2.mp3'); // You can change this to any audio file
-    audio.crossOrigin = 'anonymous'; 
-    audio.loop = true; 
-    audioRef.current = audio;
-    const context = new (window.AudioContext || window.webkitAudioContext)();
-    audioContextRef.current = context;
-    const source = context.createMediaElementSource(audio);
-    const newAnalyser = context.createAnalyser();
-    newAnalyser.fftSize = 1024;
-    // NOTE: smoothingTimeConstant is now set dynamically in AudioDrivenSphere
-    source.connect(newAnalyser); 
-    newAnalyser.connect(context.destination); 
-    setAnalyser(newAnalyser);
-    audio.play().then(() => { 
-      setIsPlaying(true); 
-    }).catch(e => console.error("Audio playback failed:", e));
-  };
-  
   return (
     <>
       <Leva collapsed />
-
-      {/* NEW: Header with Icon and Text */}
-      <div style={{
-  position: 'absolute',
-  top: '30px',
-  left: '30px',
-  zIndex: 10,
-  display: 'flex',
-  alignItems: 'center',
-  pointerEvents: 'none', // So it doesn't block orbit controls
-}}>
-  {/* Icon - Use an <img> tag for your specific logo */}
-  <div style={{ marginRight: '15px' }}>
-    <img 
-      src="/PosyVibe_Final.png" // <-- IMPORTANT: Change this to the path of your logo image!
-      alt="PosyVibe Logo" 
-      style={{ width: '50px', height: '50px', display: 'block' }} 
-    />
-  </div>
-  {/* Text Container */}
-  <div>
-    <h1 style={{
-      margin: 0,
-      fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-      color: 'white',
-      fontSize: '24px',
-      fontWeight: 600,
-      lineHeight: 1.2,
-      textShadow: '0 2px 4px rgba(0,0,0,0.5)',
-    }}>
-      PosyVibe
-    </h1>
-    <p style={{
-      margin: 0,
-      fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-      color: 'rgba(255, 255, 255, 0.7)',
-      fontSize: '14px',
-      fontWeight: 400,
-      textShadow: '0 1px 3px rgba(0,0,0,0.5)',
-    }}>
-      Music therapy app
-    </p>
-  </div>
-</div>
-
-      {/* NEW: Replaced classic button with translucent play/pause UI */}
-      {!isPlaying ? (
-        // Big Play button in the center when paused
-        <div
-          onClick={startAudio}
-          style={{
-            position: 'absolute',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)',
-            zIndex: 11,
-            width: '120px',
-            height: '120px',
-            background: 'rgba(255, 255, 255, 0.1)',
-            backdropFilter: 'blur(12px) saturate(1.5)',
-            WebkitBackdropFilter: 'blur(12px) saturate(1.5)',
-            border: '1.5px solid rgba(255, 255, 255, 0.2)',
-            borderRadius: '50%',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            cursor: 'pointer',
-            transition: 'all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)',
-            boxShadow: '0 10px 20px rgba(0,0,0,0.19), 0 6px 6px rgba(0,0,0,0.23)',
-          }}
-          onMouseEnter={e => {
-            e.currentTarget.style.transform = 'translate(-50%, -50%) scale(1.1)';
-            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)';
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.transform = 'translate(-50%, -50%) scale(1)';
-            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
-          }}
-        >
-          <svg width="50" height="50" viewBox="0 0 24 24" fill="white" style={{ marginLeft: '5px' }}>
-            <path d="M8 5v14l11-7z" />
-          </svg>
-        </div>
-      ) : (
-        // Smaller Pause button in the corner when playing
-        <div style={{ position: 'absolute', bottom: '20px', left: '20px', zIndex: 10 }}>
-          <button
-            onClick={startAudio}
-            style={{
-              padding: '12px 24px',
-              background: 'rgba(255, 255, 255, 0.1)',
-              backdropFilter: 'blur(10px)',
-              border: '1px solid rgba(255, 255, 255, 0.2)',
-              color: 'white',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              fontSize: '16px',
-            }}>
-            Pause
-          </button>
-        </div>
-      )}
-
+      
       <Canvas camera={{ position: [0, 0, 6], fov: 75 }}>
         <color attach="background" args={['#000005']} />
         <fog attach="fog" args={['#000005', 6, 20]} />
@@ -617,6 +461,7 @@ export default function Visualizer() {
           autoRotate 
           autoRotateSpeed={autoRotateSpeed} 
         />
+        {/* Only render the sphere if we have an analyser */}
         {analyser && <AudioDrivenSphere analyser={analyser} isPlaying={isPlaying} />}
         <FloatingSparks />
         <EffectComposer>
