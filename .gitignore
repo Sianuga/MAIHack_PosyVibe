@@ -1,3 +1,7 @@
+/ModelSegmenet/data/outputs/*
+/ModelSegmenet/resources/*
+/ModelSegmenet/fluidsynth.wav
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
