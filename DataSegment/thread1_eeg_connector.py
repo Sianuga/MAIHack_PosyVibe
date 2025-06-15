@@ -93,7 +93,7 @@ class BrainAccessEEGCollector(threading.Thread):
         self.sync_delay = sync_delay
         
         # Adaptive timing constants
-        self.TARGET_BATCH_DURATION = 3.0  # Target 3 seconds per batch
+        self.TARGET_BATCH_DURATION = 1.0  # Target 3 seconds per batch
         self.sample_rate = 250               # Expected sample rate
         
         # Thread control events
@@ -457,7 +457,7 @@ class BrainAccessEEGCollector(threading.Thread):
                     logger.warning(f"Channel discovery failed: {e}")
             
             # Check progress every second
-            time.sleep(1.0)
+            time.sleep(0.5)
             elapsed = time.time() - start_time
             new_chunks = self.total_chunks_received - chunks_received
             chunks_received = self.total_chunks_received
