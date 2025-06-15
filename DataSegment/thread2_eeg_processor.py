@@ -112,8 +112,8 @@ class EEGFilterProcessor(threading.Thread):
         self.filter_errors = 0
         
         # Output configuration
-        self.output_sample_rate = 1  # 1 Hz output
-        self.samples_per_output = 3  # Always output 3 samples (3 seconds)
+        self.output_sample_rate = 2  # 1 Hz output
+        self.samples_per_output = 2  # Always output 3 samples (3 seconds)
         
         logger.info(f"EEG Filter Processor initialized")
         logger.info(f"Filter config: {self.filter_config}")
