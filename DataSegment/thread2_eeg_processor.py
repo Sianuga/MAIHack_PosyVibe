@@ -112,8 +112,8 @@ class EEGFilterProcessor(threading.Thread):
         self.filter_errors = 0
         
         # Output configuration
-        self.output_sample_rate = 2  # 1 Hz output
-        self.samples_per_output = 2  # Always output 3 samples (3 seconds)
+        self.output_sample_rate = 2
+        self.samples_per_output = 2
         
         logger.info(f"EEG Filter Processor initialized")
         logger.info(f"Filter config: {self.filter_config}")
@@ -649,7 +649,7 @@ def test_thread2_processor():
         def create_test_batch(batch_id: int, session_time: float) -> EEGDataPackage:
             """Create realistic test EEG data"""
             sample_rate = 250
-            duration = 3.0  # 3 seconds
+            duration = 1.0  # 3 seconds
             n_samples = int(sample_rate * duration)  # 750 samples
             n_channels = 14
             
@@ -679,10 +679,10 @@ def test_thread2_processor():
         
         # Send test batches
         print("Sending test batches to Thread 2...")
-        test_batches = 3
+        test_batches = 2
         
         for i in range(test_batches):
-            session_time = i * 3.0  # Each batch starts 3 seconds after previous
+            session_time = i * 1.0  # Each batch starts 3 seconds after previous
             test_batch = create_test_batch(i + 1, session_time)
             
             print(f"Sending batch {i+1}: shape {test_batch.eeg_data.shape}, "
