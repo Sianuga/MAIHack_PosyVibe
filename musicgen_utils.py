@@ -57,25 +57,29 @@ Every note object =
    → Bass **begins each chord/bar on its root** (passing tones & octaves welcome).
 
 2. **Rhythmic & dynamic variety**  
-   • Mix at least three different note lengths per part.  
-   • Use syncopation, off-beats, rests, and accented/ghost velocities.
+   • Use at least three different note lengths (duration) per part.  
+   • Use syncopation, off-beats, rests, and accented/ghost velocities but don't overdo it, keep it simple and catchy.
 
-3. **Phrase & motif**  
-   • Lead should develop motifs (repeat & vary), not just climb scales.  
+3. **Melody / Lead Phrase & motif**  
+   • Lead should develop motifs (repeat & vary), not just climb scales and have varied note lengths in cool catchy melodies.
+   • Use long sustained notes, only syncopate only sometimes.
+   • Don't make lead velocity too loud, it can be just 1 or 2 above pad.
    • Pads may use inversions, broken chords, or stabs—not only block chords.  
-   • Arps should alternate directions or rhythms, not a constant stair-step.
+   • If you include any arps they should alternate directions or rhythms, not a constant stair-step, and use low velocity.
+   • Depending on the mood and genre, you can use some long notes up to or over a whole bar for melodies.
 
 4. **Drum groove**  
    • Kick + snare pocket; hats/perc drive; fill or crash every 4–8 bars.  
-   • This is primarily electronic music so even for calm tracks keep some regular kicks
+   • This is primarily electronic music so even for calm tracks keep a steady beat and kick drums. Use high velocity for kicks.
 
 5. **Ending**  
-   All parts finish **together** on the final down-beat; no trailing silence.
+   The composition will be looped, so you MUST end all parts together at the end of the last bar to avoid trailing silence and allow a smooth loop at the end.
 
 6. **No “repeat” instructions** – spell out every note bar-by-bar.
 
 ────────────────  REFERENCE: SCALES & MOODS  ────────────────
-Major  [0,2,4,5,7,9,11]  happy | Natural Minor  [0,2,3,5,7,8,10]  sad | …  
+Major  [0,2,4,5,7,9,11]  happy | Natural 
+Minor  [0,2,3,5,7,8,10]  sad | …  
 Pentatonic Major, Blues Minor, Dorian, Lydian, Mixolydian, etc.  
 Japanese: In [0,1,5,7,8], Yo [0,2,5,7,9], etc.
 
@@ -164,7 +168,7 @@ Finish every part at the final down-beat—no trailing silence.
 ► CALMER
   • Target BPM : 60 – 90   • Feel : spacious, soothing, reflective  
   • Texture : sustained pad chords, soft legato lead, sparse bass (1-2 notes/bar).  
-  • Drums : light kick, brushed hats/ride; gentle fill or cymbal swell only at major section transitions (e.g., bar 8, 16).  
+  • Drums :  regular kick, brushed hats/ride; gentle fill or cymbal swell only at major section transitions (e.g., bar 8, 16).  
   • Dynamics : velocities 50-85, gradual swells/decays, leave audible rests.  
   • Harmony : use major, lydian, dorian, or Japanese Yo; favour warm chord tones (add 9ths/maj7s).  
 
@@ -216,42 +220,39 @@ import re
 import ast
 import json
 
-import json, ast, re
-
 def parse_music_json(raw: str) -> dict:
-    """
-    Strip markdown, comments, and parse to dict.
-    Keeps top-level 'bpm' and any instrument entries containing 'notes'.
-    """
-    # 1. drop ```json fences (multiline-safe)
-    txt = re.sub(r"^\s*```[\w-]*", "", raw, flags=re.MULTILINE).strip()
+    """Return dict with instruments and optionally 'bpm' key."""
+    # --- strip markdown fences
+    txt = raw.strip()
+    txt = re.sub(r"^```(\w+)?", "", txt).strip()
     txt = re.sub(r"```$", "", txt).strip()
 
-    # 2. remove // and # comments
-    cleaned = []
+    # --- remove // or # comments
+    cleaned_lines = []
     for line in txt.splitlines():
-        line = re.split(r"//|#", line)[0]          # keep code left of comment
+        line = re.split(r"//|#", line)[0]
         if line.strip():
-            cleaned.append(line)
-    txt = "\n".join(cleaned)
+            cleaned_lines.append(line)
+    txt = "\n".join(cleaned_lines)
 
-    # 3. JSON first, fallback to Python literal
+    # --- try JSON first (handles true/false)
     try:
         data = json.loads(txt)
     except json.JSONDecodeError:
-        data = ast.literal_eval(txt)
+        try:
+            data = ast.literal_eval(txt)
+        except Exception as e:
+            print("❌ parser failed; raw output follows ↓↓↓\n", raw)
+            raise e
 
-    # 4. normalise
-    out: dict[str, Any] = {}
-    bpm_val = data.get("bpm")
-    if bpm_val is not None:
-        out["bpm"] = float(bpm_val)
-
+    # --- normalise structure
+    out = {}
+    if "bpm" in data:
+        out["bpm"] = float(data["bpm"])
     for key, val in data.items():
         if isinstance(val, dict) and "notes" in val:
             out[key] = val
     return out
-
 
 
 
@@ -306,93 +307,84 @@ def instrument_from_dict(
     return instr, max_end
 
 # ───────────────────────── constants ─────────────────────────
-BEATS_PER_BAR = 4
+BEATS_PER_BAR = 2
 DEFAULT_BPM   = 80                    # used if LLM forgets bpm
-CUSHION       = 0.1                # 10 ms early-cut
+CUSHION       = 0.02               # 10 ms early-cut
 
 # ───────────────── master pipeline ─────────────────
 
-import math
-from typing import Optional
 
 
-def play_midi_live(midi_obj: pretty_midi.PrettyMIDI):
-    """OPTIONAL: quick real-time preview through server speakers."""
-    import time, fluidsynth
+import math, subprocess, pretty_midi, tempfile
 
-    sfid, fs = None, None
-    try:
-        fs   = fluidsynth.Synth()
-        fs.start(driver="coreaudio" if os.name == "posix" else "dsound")
-        sfid = fs.sfload(str(SOUNDFONT_PATH))
-        # program / channel assignment
-        for ch, inst in enumerate(midi_obj.instruments):
-            bank = 128 if inst.is_drum else 0
-            prog = 0 if inst.is_drum else inst.program
-            fs.program_select(ch, sfid, bank, prog)
 
-        # schedule events (simple)
-        events = []
-        for ch, inst in enumerate(midi_obj.instruments):
-            for note in inst.notes:
-                events.append(("on",  note.start, ch, note.pitch, note.velocity))
-                events.append(("off", note.end,   ch, note.pitch, 0))
+REPEAT_COUNT = 2     # 1 → original length, 2 → double, 3 → triple, …
 
-        events.sort(key=lambda e: e[1])
-        t0 = time.time()
-        for typ, t, ch, p, v in events:
-            while (time.time() - t0) < t:
-                time.sleep(0.001)
-            (fs.noteon if typ=="on" else fs.noteoff)(ch, p, v)
-    finally:
-        if fs:  fs.delete()
-
-import pathlib
-def generate_and_render_music(prompt_text: str,
-                              midi_path: str,
-                              wav_path: str,
-                              *,
-                              realtime_preview: bool = False) -> str:
-    """Return path to rendered WAV.  If realtime_preview=True the MIDI is also
-    played through the server’s audio device (useful only on dev boxes)."""
-
-    # 1️⃣  LLM → JSON
+def generate_and_render_music(prompt_text: str, midi_path: str, wav_path: str):
+    # 1️⃣  LLM → JSON dict
     music = run_music_prompt(prompt_text)
 
-    # 2️⃣  tempo / bar length
-    bpm = float(music.pop("bpm", DEFAULT_BPM))
-    bar_len = 60.0 / bpm * BEATS_PER_BAR
+    bpm      = float(music.pop("bpm", DEFAULT_BPM))
+    bar_len  = 60.0 / bpm * BEATS_PER_BAR           # sec per 4/4 bar
 
-    # 3️⃣  find latest note
-    max_end = max(float(n["end"]) for part in music.values() for n in part["notes"])
+    # 2️⃣  latest note-off in the source pattern
+    max_end  = max(float(n["end"])
+                   for part in music.values()
+                   for n in part["notes"])
 
-    # 4️⃣  clip at last whole bar
-    clip_to = math.floor(max_end / bar_len) * bar_len
-    if clip_to <= 0:            # safety net
-        clip_to = max_end
+    # 3️⃣  first loop length snapped to bar grid
+    loop_len = math.ceil(max_end / bar_len - 1e-9) * bar_len
 
-    # 5️⃣  build MIDI
+    # 4️⃣  duplicate pattern REPEAT_COUNT-1 times
+    if REPEAT_COUNT > 1:
+        for part in music.values():
+            original = part["notes"][:]             # shallow copy
+            for k in range(1, REPEAT_COUNT):
+                shift = k * loop_len
+                part["notes"].extend({
+                    **n,
+                    "start": float(n["start"]) + shift,
+                    "end"  : float(n["end"])   + shift
+                } for n in original)
+
+    clip_to = loop_len * REPEAT_COUNT              # new right-hand edge
+
+    # 5️⃣  build MIDI (with optional clipping safety)
     midi = pretty_midi.PrettyMIDI()
     for name, conf in music.items():
-        inst, _ = instrument_from_dict(name, conf, clip_to=clip_to)
-        midi.instruments.append(inst)
+        instr, _ = instrument_from_dict(name, conf, clip_to=clip_to)
+        midi.instruments.append(instr)
     midi.write(midi_path)
 
-    # 6️⃣  optional real-time preview (DEV only)
-    if realtime_preview and os.getenv("ALLOW_REALTIME_PREVIEW", "false").lower() == "true":
-        play_midi_live(midi)           # blocks until done
+    # 6️⃣  render with FluidSynth
+    cmd = [
+        "fluidsynth",
+        "-ni",
+        "-F", wav_path,          # ⬅ must be before files
+        "-r", "44100",
+        "-g", "1.0",             # (optional) full-scale gain
+        SOUNDFONT_PATH,          # now the SF2
+        midi_path                # and finally the MIDI
+    ]
+    subprocess.run(cmd, check=True)
 
-    # 7️⃣  offline render (always)
-    result = subprocess.run(
-        ["fluidsynth", "-ni", "-g", "1.0",
-        str(SOUNDFONT_PATH), str(midi_path),
-        "-F", str(wav_path), "-r", "44100"],
-        capture_output=True, text=True
-    )
+    # 7️⃣  trim trailing silence so the file ends at exact bar 2·loop_len
 
-    if result.returncode != 0:
-        raise RuntimeError(
-            f"FluidSynth failed ({result.returncode}):\n{result.stderr}"
-    )
-    
+    def trim_tail_with_sox(path: str):
+        # 1. create a temp file in the same directory
+        tmp_fd, tmp_path = tempfile.mkstemp(suffix=".wav",
+                                            dir=os.path.dirname(path))
+        os.close(tmp_fd)           # we only need the name
+
+        # 2. do the reverse-silence-reverse dance
+        subprocess.run([
+            "sox", path, tmp_path,
+            "reverse", "silence", "1", "0.1", "1%", "reverse"
+        ], check=True)
+
+        # 3. atomically replace the original
+        os.replace(tmp_path, path)
+
+    trim_tail_with_sox(wav_path)
+
     return wav_path
