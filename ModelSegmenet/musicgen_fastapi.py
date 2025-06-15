@@ -66,6 +66,8 @@ async def generate_and_notify(payload: DataPayload):
     3. Notifies the main backend with a URL to the finished track.
     """
     # 1. Synthesize a music prompt from the incoming data
+
+    #CHANGE TEMP TO EMOTIONS-------------------
     temp = payload.data.get("temperature", 25.0)
     prompt = ""
     if temp >= 28.0:
