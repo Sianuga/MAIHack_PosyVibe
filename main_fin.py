@@ -119,7 +119,7 @@ class EEGSystemController:
         # Thread references
         self.eeg_collector = None      # Thread 1 (EEG Collection)
         self.filter_processor = None   # Thread 2 (Filtering & Processing)
-        # ADD YOUR THREAD 3 HERE: self.emotion_model = None
+        self.emotion_model = None
         
         # Communication queues
         self.command_queue = queue.Queue(maxsize=10)       # External -> Main
@@ -212,18 +212,17 @@ class EEGSystemController:
                 filter_config=filter_config
             )
             
-            # ADD YOUR THREAD 3 INITIALIZATION HERE:
-            # self.emotion_model = YourEmotionModel(
-            #     input_queue=self.filtered_eeg_queue,
-            #     output_queue=self.model_results_queue,
-            #     model_config=self.config.get('model_config', {})
-            # )
+            self.emotion_model = model(
+                input_queue=self.filtered_eeg_queue,
+                output_queue=self.model_results_queue,
+                model_config=self.config.get('model_config', {})
+            )
             
             # Start threads
             self.eeg_collector.start()
             self.filter_processor.start()
-            # ADD YOUR THREAD 3 START HERE: self.emotion_model.start()
-            
+            self.emotion_model.start()
+
             # Wait for initialization
             if not self.eeg_collector.wait_for_connection(timeout=25):
                 raise RuntimeError("Failed to connect to EEG device")
@@ -245,9 +244,9 @@ class EEGSystemController:
             logger.info("Filter processor ready")
             
             # ADD YOUR THREAD 3 STATUS CHECK HERE:
-            # if not self.emotion_model.is_active():
-            #     raise RuntimeError("Emotion model failed to start")
-            # logger.info("Emotion model ready")
+            if not self.emotion_model.is_active():
+                 raise RuntimeError("Emotion model failed to start")
+            logger.info("Emotion model ready")
             
             self.system_initialized.set()
             self._set_state(SystemState.READY)
@@ -444,7 +443,7 @@ class EEGSystemController:
         
         # Stop threads in reverse order
         # ADD YOUR THREAD 3 SHUTDOWN HERE: 
-        # if self.emotion_model: self.emotion_model.stop()
+        if self.emotion_model: self.emotion_model.stop()
         
         if self.filter_processor:
             self.filter_processor.stop()
