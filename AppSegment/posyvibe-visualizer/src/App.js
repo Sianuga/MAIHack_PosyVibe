@@ -148,7 +148,7 @@ function App() {
         <>
           <p style={{margin: '5px 0', color: '#00c4ff'}}>{data.message}</p>
           <p style={{margin: '5px 0'}}><strong>Track:</strong> <a href={data.music_url} target="_blank" rel="noopener noreferrer">{data.music_url.split('/').pop()}</a></p>
-
+          <p style={{margin: '5px 0', fontStyle: 'italic', opacity: 0.7}}>Source Prompt: {data.original_prompt}</p>
         </>
       );
     }

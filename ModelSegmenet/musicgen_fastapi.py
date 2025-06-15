@@ -57,27 +57,29 @@ async def run_sync(func, *args, **kw):
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, lambda: func(*args, **kw))
 
-# ----------------- NEW WEBHOOK LOGIC -----------------
+# ----------------- UPDATED WEBHOOK LOGIC FOR EMOTIONS -----------------
 async def generate_and_notify(payload: DataPayload):
     """
     This is the background task for the webhook.
-    1. Creates a music prompt from sensor data.
+    1. Creates a music prompt from emotion data.
     2. Runs your music generation function.
     3. Notifies the main backend with a URL to the finished track.
     """
-    # 1. Synthesize a music prompt from the incoming data
-
-    #CHANGE TEMP TO EMOTIONS-------------------
-    temp = payload.data.get("temperature", 25.0)
-    prompt = ""
-    if temp >= 28.0:
-        prompt = "Energize: a fast, 160 bpm electronic track with a driving beat."
-    elif temp <= 22.0:
-        prompt = "Make Calmer: a slow, 70 bpm ambient, soothing track."
-    else:
-        prompt = "Make Happier: an upbeat, 120 bpm pop track."
-
-    print(f"AI Service: Generated prompt from data: '{prompt}'")
+    # 1. Extract emotion from the incoming data
+    emotion = payload.data.get("emotion", "neutral")
+    confidence = payload.data.get("confidence", 0.0)
+    
+    # Map emotions to music prompts
+    emotion_prompts = {
+        "happy": "Make Happier: an upbeat, 120 bpm pop track with major chords and bright melodies.",
+        "energetic": "High Energy: a fast-paced 140 bpm dance track with driving rhythm.",
+        "calm": "Relaxing: a slow 60 bpm meditation track with soft pads and nature sounds."
+    }
+    
+    # Get the prompt based on emotion, with fallback
+    prompt = emotion_prompts.get(emotion, "happy")
+    
+    print(f"AI Service: Generated prompt from emotion '{emotion}' (confidence: {confidence}): '{prompt}'")
 
     # 2. Generate music file using your existing logic
     uid = uuid.uuid4().hex
@@ -91,10 +93,12 @@ async def generate_and_notify(payload: DataPayload):
         # 3. Prepare the response payload for the main backend
         download_url = f"{MUSIC_SERVICE_BASE_URL}/download/{wav_path.name}"
         processed_data = {
-            "message": "Music generated from sensor data.",
+            "message": f"Music generated from emotion: {emotion}",
             "music_url": download_url,
             "original_prompt": prompt,
-            "source_data": payload.data
+            "source_data": payload.data,
+            "emotion": emotion,
+            "confidence": confidence
         }
         response_payload = AIResponse(processed_data=processed_data, request_id=uid)
 
@@ -143,7 +147,6 @@ async def generate_music_direct(body: PromptBody):
 async def music_socket_direct(ws: WebSocket):
     """For direct testing: Connect via WebSocket to generate music."""
     await ws.accept()
-    # ... (Your original WebSocket logic is preserved here) ...
     try:
         while True:
             data = await ws.receive_text()
@@ -178,7 +181,6 @@ def download(file: str):
 
 @app.delete("/cleanup")
 async def cleanup():
-    # ... (Your cleanup logic is preserved) ...
     removed = 0
     for f in OUTPUT_DIR.glob("*"):
         try: f.unlink(); removed += 1
