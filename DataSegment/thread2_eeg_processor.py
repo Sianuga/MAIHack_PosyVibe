@@ -490,42 +490,38 @@ class EEGFilterProcessor(threading.Thread):
         logger.debug(f"Downsampling complete: output shape {downsampled.shape}")
         
         return downsampled
-    
+
     def _create_time_column(self, batch_session_time: float, batch_duration: float) -> np.ndarray:
         """
         Create time column with times relative to session/recording start
-        
-        Always creates exactly 3 time points at 1-second intervals from session start
-        Example: 
-        - Batch 1 (0-3s): [0.0, 1.0, 2.0] 
-        - Batch 2 (3-6s): [3.0, 4.0, 5.0]
-        - Batch 3 (6-9s): [6.0, 7.0, 8.0]
-        
+
+        Now supports dynamic time points based on batch duration and output rate (e.g., 2Hz = every 0.5s)
+
         Parameters:
         -----------
         batch_session_time : float
-            Session time when this batch started (seconds from session start)
+            Time when this batch started (in seconds from session start)
         batch_duration : float
-            Actual duration of the batch
-            
+            Duration of the batch (typically 1.0s)
+
         Returns:
         --------
         np.ndarray
-            Time values relative to session/recording start (in seconds)
+            Time values for each output sample (e.g., [0.0, 0.5] for 1s batch at 2Hz)
         """
-        # Calculate the 3 time points for this batch relative to session start
-        # Each sample represents 1 second intervals from when this batch started
-        time_point_1 = batch_session_time + 0.0  # Start of this batch period
-        time_point_2 = batch_session_time + 1.0  # 1 second into this batch period  
-        time_point_3 = batch_session_time + 2.0  # 2 seconds into this batch period
-        
-        session_times = np.array([time_point_1, time_point_2, time_point_3])
-        
-        logger.debug(f"Time column: batch starts at session time {batch_session_time:.2f}s, "
-                    f"output samples at session times {session_times}")
-        
+        interval = 1.0 / self.output_sample_rate  # 1/2 Hz = 0.5s
+        num_samples = int(batch_duration * self.output_sample_rate)  # 1s * 2Hz = 2 próbki
+
+        session_times = np.array([
+            batch_session_time + i * interval for i in range(num_samples)
+        ])
+
+        logger.debug(f"Time column: batch starts at {batch_session_time:.2f}s, "
+                     f"duration: {batch_duration:.1f}s, "
+                     f"interval: {interval:.2f}s → times: {session_times}")
+
         return session_times
-    
+
     def _format_as_dataframe(
         self, 
         downsampled_data: np.ndarray,
